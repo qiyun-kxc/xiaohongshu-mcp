@@ -79,23 +79,57 @@ func (f *FeedDetailAction) GetFeedDetail(ctx context.Context, feedID, xsecToken,
 func (f *FeedDetailAction) GetFeedDetailWithConfig(ctx context.Context, feedID, xsecToken, xsecSource string, loadAllComments bool, config CommentLoadConfig) (*FeedDetailResponse, error) {
 	page := f.page.Context(ctx).Timeout(10 * time.Minute)
 
-	// 尝试加载页面（带token或不带token）
-	result, err := f.tryLoadFeedDetail(page, feedID, xsecToken, xsecSource, loadAllComments, config)
-	if err == nil {
-		return result, nil
-	}
+	// source 轮转列表：优先用指定的 source，然后尝试其他常见 source
+	sources := buildSourceRotation(xsecSource)
 
-	// 如果带token失败了，尝试不带token访问（利用已登录session）
+	var lastErr error
+
 	if xsecToken != "" {
-		logrus.Infof("带token访问失败，尝试不带token的fallback: %v", err)
-		result, fallbackErr := f.tryLoadFeedDetail(page, feedID, "", "", loadAllComments, config)
-		if fallbackErr == nil {
+		for _, source := range sources {
+			logrus.Infof("尝试 xsec_source=%s", source)
+			result, err := f.tryLoadFeedDetail(page, feedID, xsecToken, source, loadAllComments, config)
+			if err == nil {
+				return result, nil
+			}
+			lastErr = err
+			logrus.Warnf("xsec_source=%s 失败: %v", source, err)
+		}
+
+		// 所有 source 都失败了，最后试不带 token
+		logrus.Infof("所有 source 均失败，尝试不带 token 的 fallback")
+		result, err := f.tryLoadFeedDetail(page, feedID, "", "", loadAllComments, config)
+		if err == nil {
 			return result, nil
 		}
-		logrus.Warnf("fallback也失败了: %v", fallbackErr)
+		lastErr = err
+	} else {
+		// 没有 token，直接裸访问
+		result, err := f.tryLoadFeedDetail(page, feedID, "", "", loadAllComments, config)
+		if err == nil {
+			return result, nil
+		}
+		lastErr = err
 	}
 
-	return nil, err
+	return nil, lastErr
+}
+
+// buildSourceRotation 构建 source 轮转列表，指定的 source 排第一
+func buildSourceRotation(preferred string) []string {
+	allSources := []string{"pc_feed", "pc_search", "app_share"}
+
+	if preferred == "" {
+		return allSources
+	}
+
+	// 把 preferred 放第一位，其余跟在后面
+	result := []string{preferred}
+	for _, s := range allSources {
+		if s != preferred {
+			result = append(result, s)
+		}
+	}
+	return result
 }
 
 // tryLoadFeedDetail 尝试加载Feed详情页面
