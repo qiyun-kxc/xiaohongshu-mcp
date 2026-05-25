@@ -85,7 +85,13 @@ func (f *FeedDetailAction) GetFeedDetailWithConfig(ctx context.Context, feedID, 
 	var lastErr error
 
 	if xsecToken != "" {
-		for _, source := range sources {
+		for i, source := range sources {
+			if i > 0 {
+				// 轮转重试前加随机延迟，避免触发风控
+				delay := 1000 + rand.Intn(2000) // 1~3秒
+				logrus.Infof("轮转冷却 %dms...", delay)
+				time.Sleep(time.Duration(delay) * time.Millisecond)
+			}
 			logrus.Infof("尝试 xsec_source=%s", source)
 			result, err := f.tryLoadFeedDetail(page, feedID, xsecToken, source, loadAllComments, config)
 			if err == nil {
