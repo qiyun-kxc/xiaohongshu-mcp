@@ -78,6 +78,28 @@ func (f *FeedDetailAction) GetFeedDetail(ctx context.Context, feedID, xsecToken 
 
 func (f *FeedDetailAction) GetFeedDetailWithConfig(ctx context.Context, feedID, xsecToken string, loadAllComments bool, config CommentLoadConfig) (*FeedDetailResponse, error) {
 	page := f.page.Context(ctx).Timeout(10 * time.Minute)
+
+	// 尝试加载页面（带token或不带token）
+	result, err := f.tryLoadFeedDetail(page, feedID, xsecToken, loadAllComments, config)
+	if err == nil {
+		return result, nil
+	}
+
+	// 如果带token失败了，尝试不带token访问（利用已登录session）
+	if xsecToken != "" {
+		logrus.Infof("带token访问失败，尝试不带token的fallback: %v", err)
+		result, fallbackErr := f.tryLoadFeedDetail(page, feedID, "", loadAllComments, config)
+		if fallbackErr == nil {
+			return result, nil
+		}
+		logrus.Warnf("fallback也失败了: %v", fallbackErr)
+	}
+
+	return nil, err
+}
+
+// tryLoadFeedDetail 尝试加载Feed详情页面
+func (f *FeedDetailAction) tryLoadFeedDetail(page *rod.Page, feedID, xsecToken string, loadAllComments bool, config CommentLoadConfig) (*FeedDetailResponse, error) {
 	url := makeFeedDetailURL(feedID, xsecToken)
 
 	logrus.Infof("打开 feed 详情页: %s", url)
@@ -863,5 +885,8 @@ func (f *FeedDetailAction) extractFeedDetail(page *rod.Page, feedID string) (*Fe
 }
 
 func makeFeedDetailURL(feedID, xsecToken string) string {
+	if xsecToken == "" {
+		return fmt.Sprintf("https://www.xiaohongshu.com/explore/%s", feedID)
+	}
 	return fmt.Sprintf("https://www.xiaohongshu.com/explore/%s?xsec_token=%s&xsec_source=pc_feed", feedID, xsecToken)
 }

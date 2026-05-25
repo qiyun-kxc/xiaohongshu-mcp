@@ -373,16 +373,8 @@ func (s *AppServer) handleGetFeedDetail(ctx context.Context, args map[string]any
 		}
 	}
 
-	xsecToken, ok := args["xsec_token"].(string)
-	if !ok || xsecToken == "" {
-		return &MCPToolResult{
-			Content: []MCPContent{{
-				Type: "text",
-				Text: "获取Feed详情失败: 缺少xsec_token参数",
-			}},
-			IsError: true,
-		}
-	}
+	xsecToken, _ := args["xsec_token"].(string)
+	// xsec_token 现在是可选的，为空时后端会尝试不带token访问
 
 	loadAll := false
 	if raw, ok := args["load_all_comments"]; ok {
