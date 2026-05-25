@@ -72,15 +72,15 @@ func NewFeedDetailAction(page *rod.Page) *FeedDetailAction {
 
 // ========== 主要业务逻辑 ==========
 
-func (f *FeedDetailAction) GetFeedDetail(ctx context.Context, feedID, xsecToken string, loadAllComments bool, config CommentLoadConfig) (*FeedDetailResponse, error) {
-	return f.GetFeedDetailWithConfig(ctx, feedID, xsecToken, loadAllComments, config)
+func (f *FeedDetailAction) GetFeedDetail(ctx context.Context, feedID, xsecToken, xsecSource string, loadAllComments bool, config CommentLoadConfig) (*FeedDetailResponse, error) {
+	return f.GetFeedDetailWithConfig(ctx, feedID, xsecToken, xsecSource, loadAllComments, config)
 }
 
-func (f *FeedDetailAction) GetFeedDetailWithConfig(ctx context.Context, feedID, xsecToken string, loadAllComments bool, config CommentLoadConfig) (*FeedDetailResponse, error) {
+func (f *FeedDetailAction) GetFeedDetailWithConfig(ctx context.Context, feedID, xsecToken, xsecSource string, loadAllComments bool, config CommentLoadConfig) (*FeedDetailResponse, error) {
 	page := f.page.Context(ctx).Timeout(10 * time.Minute)
 
 	// 尝试加载页面（带token或不带token）
-	result, err := f.tryLoadFeedDetail(page, feedID, xsecToken, loadAllComments, config)
+	result, err := f.tryLoadFeedDetail(page, feedID, xsecToken, xsecSource, loadAllComments, config)
 	if err == nil {
 		return result, nil
 	}
@@ -88,7 +88,7 @@ func (f *FeedDetailAction) GetFeedDetailWithConfig(ctx context.Context, feedID, 
 	// 如果带token失败了，尝试不带token访问（利用已登录session）
 	if xsecToken != "" {
 		logrus.Infof("带token访问失败，尝试不带token的fallback: %v", err)
-		result, fallbackErr := f.tryLoadFeedDetail(page, feedID, "", loadAllComments, config)
+		result, fallbackErr := f.tryLoadFeedDetail(page, feedID, "", "", loadAllComments, config)
 		if fallbackErr == nil {
 			return result, nil
 		}
@@ -99,8 +99,8 @@ func (f *FeedDetailAction) GetFeedDetailWithConfig(ctx context.Context, feedID, 
 }
 
 // tryLoadFeedDetail 尝试加载Feed详情页面
-func (f *FeedDetailAction) tryLoadFeedDetail(page *rod.Page, feedID, xsecToken string, loadAllComments bool, config CommentLoadConfig) (*FeedDetailResponse, error) {
-	url := makeFeedDetailURL(feedID, xsecToken)
+func (f *FeedDetailAction) tryLoadFeedDetail(page *rod.Page, feedID, xsecToken, xsecSource string, loadAllComments bool, config CommentLoadConfig) (*FeedDetailResponse, error) {
+	url := makeFeedDetailURL(feedID, xsecToken, xsecSource)
 
 	logrus.Infof("打开 feed 详情页: %s", url)
 	logrus.Infof("配置: 点击更多=%v, 回复阈值=%d, 最大评论数=%d, 滚动速度=%s",
@@ -884,9 +884,12 @@ func (f *FeedDetailAction) extractFeedDetail(page *rod.Page, feedID string) (*Fe
 	}, nil
 }
 
-func makeFeedDetailURL(feedID, xsecToken string) string {
+func makeFeedDetailURL(feedID, xsecToken, xsecSource string) string {
 	if xsecToken == "" {
 		return fmt.Sprintf("https://www.xiaohongshu.com/explore/%s", feedID)
 	}
-	return fmt.Sprintf("https://www.xiaohongshu.com/explore/%s?xsec_token=%s&xsec_source=pc_feed", feedID, xsecToken)
+	if xsecSource == "" {
+		xsecSource = "pc_feed"
+	}
+	return fmt.Sprintf("https://www.xiaohongshu.com/explore/%s?xsec_token=%s&xsec_source=%s", feedID, xsecToken, xsecSource)
 }

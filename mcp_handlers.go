@@ -375,6 +375,8 @@ func (s *AppServer) handleGetFeedDetail(ctx context.Context, args map[string]any
 
 	xsecToken, _ := args["xsec_token"].(string)
 	// xsec_token 现在是可选的，为空时后端会尝试不带token访问
+	xsecSource, _ := args["xsec_source"].(string)
+	// xsec_source 可选，默认 pc_feed，分享链接用 app_share
 
 	loadAll := false
 	if raw, ok := args["load_all_comments"]; ok {
@@ -436,7 +438,7 @@ func (s *AppServer) handleGetFeedDetail(ctx context.Context, args map[string]any
 
 	logrus.Infof("MCP: 获取Feed详情 - Feed ID: %s, loadAllComments=%v, config=%+v", feedID, loadAll, config)
 
-	result, err := s.xiaohongshuService.GetFeedDetailWithConfig(ctx, feedID, xsecToken, loadAll, config)
+	result, err := s.xiaohongshuService.GetFeedDetailWithConfig(ctx, feedID, xsecToken, xsecSource, loadAll, config)
 	if err != nil {
 		return &MCPToolResult{
 			Content: []MCPContent{{

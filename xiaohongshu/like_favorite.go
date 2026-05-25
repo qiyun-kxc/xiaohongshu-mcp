@@ -45,7 +45,7 @@ func newInteractAction(page *rod.Page) *interactAction {
 
 func (a *interactAction) preparePage(ctx context.Context, actionType interactActionType, feedID, xsecToken string) *rod.Page {
 	page := a.page.Context(ctx).Timeout(60 * time.Second)
-	url := makeFeedDetailURL(feedID, xsecToken)
+	url := makeFeedDetailURL(feedID, xsecToken, "")
 	logrus.Infof("Opening feed detail page for %s: %s", actionType, url)
 
 	page.MustNavigate(url)

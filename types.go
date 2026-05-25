@@ -50,6 +50,7 @@ type CommentLoadConfig struct {
 type FeedDetailRequest struct {
 	FeedID          string             `json:"feed_id" binding:"required"`
 	XsecToken       string             `json:"xsec_token"`
+	XsecSource      string             `json:"xsec_source,omitempty"`
 	LoadAllComments bool               `json:"load_all_comments,omitempty"`
 	CommentConfig   *CommentLoadConfig `json:"comment_config,omitempty"`
 }
