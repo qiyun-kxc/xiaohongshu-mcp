@@ -75,6 +75,14 @@ type UserProfileArgs struct {
 type ResolveShortlinkArgs struct {
 	URL string `json:"url" jsonschema:"小红书分享短链或完整URL，如 http://xhslink.com/xxx 或 https://www.xiaohongshu.com/explore/xxx?xsec_token=xxx"`
 }
+// ExtractTextArgs 提取帖子图文的参数
+type ExtractTextArgs struct {
+	FeedID    string `json:"feed_id,omitempty" jsonschema:"小红书笔记ID"`
+	XsecToken string `json:"xsec_token,omitempty" jsonschema:"访问令牌（可选）"`
+	XsecSource string `json:"xsec_source,omitempty" jsonschema:"令牌来源（可选）"`
+	URL       string `json:"url,omitempty" jsonschema:"小红书分享短链或完整URL（与feed_id二选一）"`
+}
+
 
 // PostCommentArgs 发表评论的参数
 type PostCommentArgs struct {
@@ -465,7 +473,29 @@ func registerTools(server *mcp.Server, appServer *AppServer) {
 		}),
 	)
 
-	logrus.Infof("Registered %d MCP tools", 14)
+	// 工具 15: 提取帖子图文（含OCR）
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "extract_text_from_feed",
+			Description: "获取小红书帖子详情并OCR提取所有图片中的文字。支持传入feed_id+xsec_token或分享短链URL。返回帖子元信息和每张图片的OCR文字",
+			Annotations: &mcp.ToolAnnotations{
+				Title:        "Extract Text From Feed",
+				ReadOnlyHint: true,
+			},
+		},
+		withPanicRecovery("extract_text_from_feed", func(ctx context.Context, req *mcp.CallToolRequest, args ExtractTextArgs) (*mcp.CallToolResult, any, error) {
+			argsMap := map[string]interface{}{
+				"feed_id":     args.FeedID,
+				"xsec_token":  args.XsecToken,
+				"xsec_source": args.XsecSource,
+				"url":         args.URL,
+			}
+			result := appServer.handleExtractTextFromFeed(ctx, argsMap)
+			return convertToMCPResult(result), nil, nil
+		}),
+	)
+
+	logrus.Infof("Registered %d MCP tools", 15)
 }
 
 // convertToMCPResult 将自定义的 MCPToolResult 转换为官方 SDK 的格式

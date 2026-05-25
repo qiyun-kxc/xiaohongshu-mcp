@@ -772,3 +772,170 @@ func (s *AppServer) handleResolveShortlink(ctx context.Context, rawURL string) *
 		Content: []MCPContent{{Type: "text", Text: string(jsonData)}},
 	}
 }
+
+// handleExtractTextFromFeed 获取帖子详情并OCR所有图片
+func (s *AppServer) handleExtractTextFromFeed(ctx context.Context, args map[string]any) *MCPToolResult {
+	logrus.Info("MCP: 提取帖子图文")
+
+	feedID, _ := args["feed_id"].(string)
+	xsecToken, _ := args["xsec_token"].(string)
+	xsecSource, _ := args["xsec_source"].(string)
+	shortURL, _ := args["url"].(string)
+
+	// 如果提供了短链，先解析
+	if shortURL != "" && feedID == "" {
+		result, err := xiaohongshu.ResolveShortlink(shortURL)
+		if err != nil {
+			// 尝试直接解析完整URL
+			result, err = xiaohongshu.ParseXHSURL(shortURL)
+			if err != nil {
+				return &MCPToolResult{
+					Content: []MCPContent{{Type: "text", Text: "短链解析失败: " + err.Error()}},
+					IsError: true,
+				}
+			}
+		}
+		feedID = result.FeedID
+		xsecToken = result.XsecToken
+		xsecSource = result.XsecSource
+	}
+
+	if feedID == "" {
+		return &MCPToolResult{
+			Content: []MCPContent{{Type: "text", Text: "需要提供 feed_id 或 url"}},
+			IsError: true,
+		}
+	}
+
+	// 获取帖子详情
+	config := xiaohongshu.DefaultCommentLoadConfig()
+	detail, err := s.xiaohongshuService.GetFeedDetailWithConfig(ctx, feedID, xsecToken, xsecSource, false, config)
+	if err != nil {
+		return &MCPToolResult{
+			Content: []MCPContent{{Type: "text", Text: "获取帖子详情失败: " + err.Error()}},
+			IsError: true,
+		}
+	}
+
+	// 提取图片URL列表
+	type imageInfo struct {
+		URLDefault string `json:"urlDefault"`
+	}
+	type noteData struct {
+		Note struct {
+			Title     string      `json:"title"`
+			Desc      string      `json:"desc"`
+			ImageList []imageInfo `json:"imageList"`
+			User      struct {
+				Nickname string `json:"nickname"`
+			} `json:"user"`
+		} `json:"note"`
+	}
+
+	// 重新解析detail.Data获取图片URL
+	dataBytes, err := json.Marshal(detail.Data)
+	if err != nil {
+		return &MCPToolResult{
+			Content: []MCPContent{{Type: "text", Text: "解析帖子数据失败: " + err.Error()}},
+			IsError: true,
+		}
+	}
+	var note noteData
+	if err := json.Unmarshal(dataBytes, &note); err != nil {
+		return &MCPToolResult{
+			Content: []MCPContent{{Type: "text", Text: "解析图片列表失败: " + err.Error()}},
+			IsError: true,
+		}
+	}
+
+	imageURLs := make([]string, 0)
+	for _, img := range note.Note.ImageList {
+		if img.URLDefault != "" {
+			imageURLs = append(imageURLs, img.URLDefault)
+		}
+	}
+
+	if len(imageURLs) == 0 {
+		// 没有图片，直接返回文字内容
+		result := map[string]any{
+			"feed_id": feedID,
+			"title":   note.Note.Title,
+			"author":  note.Note.User.Nickname,
+			"desc":    note.Note.Desc,
+			"images":  []any{},
+			"text_all": note.Note.Desc,
+		}
+		jsonData, _ := json.MarshalIndent(result, "", "  ")
+		return &MCPToolResult{
+			Content: []MCPContent{{Type: "text", Text: string(jsonData)}},
+		}
+	}
+
+	// 启动OCR
+	bridge, err := GetOCRBridge()
+	if err != nil {
+		return &MCPToolResult{
+			Content: []MCPContent{{Type: "text", Text: "OCR引擎启动失败: " + err.Error()}},
+			IsError: true,
+		}
+	}
+
+	logrus.Infof("开始OCR %d 张图片", len(imageURLs))
+	ocrResults := bridge.OCRMultiple(imageURLs)
+
+	// 组装结果
+	textAll := ""
+	images := make([]map[string]any, len(ocrResults))
+	successCount := 0
+	for i, r := range ocrResults {
+		images[i] = map[string]any{
+			"index":      i,
+			"status":     r.Status,
+			"text":       r.Text,
+			"line_count": r.LineCount,
+			"elapsed_ms": r.ElapsedMs,
+		}
+		if r.Error != "" {
+			images[i]["error"] = r.Error
+		}
+		if r.Status == "success" && r.Text != "" {
+			successCount++
+			textAll += fmt.Sprintf("[图%d]\n%s\n\n", i+1, r.Text)
+		} else if r.Status == "empty_text" {
+			textAll += fmt.Sprintf("[图%d]\n(无文字)\n\n", i+1)
+		} else {
+			textAll += fmt.Sprintf("[图%d]\n(OCR失败: %s)\n\n", i+1, r.Error)
+		}
+	}
+
+	status := "success"
+	if successCount == 0 {
+		status = "failed"
+	} else if successCount < len(ocrResults) {
+		status = "partial_success"
+	}
+
+	result := map[string]any{
+		"feed_id":    feedID,
+		"title":      note.Note.Title,
+		"author":     note.Note.User.Nickname,
+		"desc":       note.Note.Desc,
+		"ocr_status": status,
+		"ocr_engine": "rapidocr-onnxruntime",
+		"image_count": len(imageURLs),
+		"text_all":   textAll,
+		"images":     images,
+	}
+
+	jsonData, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return &MCPToolResult{
+			Content: []MCPContent{{Type: "text", Text: "序列化结果失败: " + err.Error()}},
+			IsError: true,
+		}
+	}
+
+	return &MCPToolResult{
+		Content: []MCPContent{{Type: "text", Text: string(jsonData)}},
+	}
+}
