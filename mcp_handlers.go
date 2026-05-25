@@ -734,3 +734,39 @@ func (s *AppServer) handleReplyComment(ctx context.Context, args map[string]inte
 		}},
 	}
 }
+
+// handleResolveShortlink 处理解析分享短链
+func (s *AppServer) handleResolveShortlink(ctx context.Context, rawURL string) *MCPToolResult {
+	logrus.Infof("MCP: 解析短链 - URL: %s", rawURL)
+
+	if rawURL == "" {
+		return &MCPToolResult{
+			Content: []MCPContent{{Type: "text", Text: "解析失败: 缺少URL参数"}},
+			IsError: true,
+		}
+	}
+
+	result, err := xiaohongshu.ResolveShortlink(rawURL)
+	if err != nil {
+		// 如果不是短链，尝试直接解析为完整URL
+		result, err = xiaohongshu.ParseXHSURL(rawURL)
+		if err != nil {
+			return &MCPToolResult{
+				Content: []MCPContent{{Type: "text", Text: "解析失败: " + err.Error()}},
+				IsError: true,
+			}
+		}
+	}
+
+	jsonData, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		return &MCPToolResult{
+			Content: []MCPContent{{Type: "text", Text: "序列化结果失败: " + err.Error()}},
+			IsError: true,
+		}
+	}
+
+	return &MCPToolResult{
+		Content: []MCPContent{{Type: "text", Text: string(jsonData)}},
+	}
+}

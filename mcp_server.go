@@ -70,6 +70,11 @@ type UserProfileArgs struct {
 	XsecToken string `json:"xsec_token" jsonschema:"访问令牌，从Feed列表的xsecToken字段获取"`
 }
 
+// ResolveShortlinkArgs 解析短链的参数
+type ResolveShortlinkArgs struct {
+	URL string `json:"url" jsonschema:"小红书分享短链或完整URL，如 http://xhslink.com/xxx 或 https://www.xiaohongshu.com/explore/xxx?xsec_token=xxx"`
+}
+
 // PostCommentArgs 发表评论的参数
 type PostCommentArgs struct {
 	FeedID    string `json:"feed_id" jsonschema:"小红书笔记ID，从Feed列表获取"`
@@ -443,7 +448,23 @@ func registerTools(server *mcp.Server, appServer *AppServer) {
 		}),
 	)
 
-	logrus.Infof("Registered %d MCP tools", 13)
+	// 工具 14: 解析分享短链
+	mcp.AddTool(server,
+		&mcp.Tool{
+			Name:        "resolve_shortlink",
+			Description: "解析小红书分享短链或完整URL，提取feed_id和xsec_token。支持xhslink.com短链和xiaohongshu.com完整链接",
+			Annotations: &mcp.ToolAnnotations{
+				Title:        "Resolve Shortlink",
+				ReadOnlyHint: true,
+			},
+		},
+		withPanicRecovery("resolve_shortlink", func(ctx context.Context, req *mcp.CallToolRequest, args ResolveShortlinkArgs) (*mcp.CallToolResult, any, error) {
+			result := appServer.handleResolveShortlink(ctx, args.URL)
+			return convertToMCPResult(result), nil, nil
+		}),
+	)
+
+	logrus.Infof("Registered %d MCP tools", 14)
 }
 
 // convertToMCPResult 将自定义的 MCPToolResult 转换为官方 SDK 的格式
