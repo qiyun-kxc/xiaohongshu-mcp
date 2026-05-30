@@ -9,7 +9,6 @@ import (
 
 	"github.com/go-rod/rod"
 	"github.com/sirupsen/logrus"
-	"github.com/xpzouying/headless_browser"
 	"github.com/xpzouying/xiaohongshu-mcp/browser"
 	"github.com/xpzouying/xiaohongshu-mcp/configs"
 	"github.com/xpzouying/xiaohongshu-mcp/cookies"
@@ -105,7 +104,7 @@ func (s *XiaohongshuService) CheckLoginStatus(ctx context.Context) (*LoginStatus
 	b := newBrowser()
 	defer b.Close()
 
-	page := b.NewPage()
+	page := b.NewNormalizedPage()
 	defer page.Close()
 
 	loginAction := xiaohongshu.NewLogin(page)
@@ -126,7 +125,7 @@ func (s *XiaohongshuService) CheckLoginStatus(ctx context.Context) (*LoginStatus
 // GetLoginQrcode 获取登录的扫码二维码
 func (s *XiaohongshuService) GetLoginQrcode(ctx context.Context) (*LoginQrcodeResponse, error) {
 	b := newBrowser()
-	page := b.NewPage()
+	page := b.NewNormalizedPage()
 
 	deferFunc := func() {
 		_ = page.Close()
@@ -249,7 +248,7 @@ func (s *XiaohongshuService) publishContent(ctx context.Context, content xiaohon
 	b := newBrowser()
 	defer b.Close()
 
-	page := b.NewPage()
+	page := b.NewNormalizedPage()
 	defer page.Close()
 
 	action, err := xiaohongshu.NewPublishImageAction(page)
@@ -332,7 +331,7 @@ func (s *XiaohongshuService) publishVideo(ctx context.Context, content xiaohongs
 	b := newBrowser()
 	defer b.Close()
 
-	page := b.NewPage()
+	page := b.NewNormalizedPage()
 	defer page.Close()
 
 	action, err := xiaohongshu.NewPublishVideoAction(page)
@@ -348,7 +347,7 @@ func (s *XiaohongshuService) ListFeeds(ctx context.Context) (*FeedsListResponse,
 	b := newBrowser()
 	defer b.Close()
 
-	page := b.NewPage()
+	page := b.NewNormalizedPage()
 	defer page.Close()
 
 	// 创建 Feeds 列表 action
@@ -373,7 +372,7 @@ func (s *XiaohongshuService) SearchFeeds(ctx context.Context, keyword string, fi
 	b := newBrowser()
 	defer b.Close()
 
-	page := b.NewPage()
+	page := b.NewNormalizedPage()
 	defer page.Close()
 
 	action := xiaohongshu.NewSearchAction(page)
@@ -401,7 +400,7 @@ func (s *XiaohongshuService) GetFeedDetailWithConfig(ctx context.Context, feedID
 	b := newBrowser()
 	defer b.Close()
 
-	page := b.NewPage()
+	page := b.NewNormalizedPage()
 	defer page.Close()
 
 	// 创建 Feed 详情 action
@@ -426,7 +425,7 @@ func (s *XiaohongshuService) UserProfile(ctx context.Context, userID, xsecToken 
 	b := newBrowser()
 	defer b.Close()
 
-	page := b.NewPage()
+	page := b.NewNormalizedPage()
 	defer page.Close()
 
 	action := xiaohongshu.NewUserProfileAction(page)
@@ -450,7 +449,7 @@ func (s *XiaohongshuService) PostCommentToFeed(ctx context.Context, feedID, xsec
 	b := newBrowser()
 	defer b.Close()
 
-	page := b.NewPage()
+	page := b.NewNormalizedPage()
 	defer page.Close()
 
 	action := xiaohongshu.NewCommentFeedAction(page)
@@ -467,7 +466,7 @@ func (s *XiaohongshuService) LikeFeed(ctx context.Context, feedID, xsecToken str
 	b := newBrowser()
 	defer b.Close()
 
-	page := b.NewPage()
+	page := b.NewNormalizedPage()
 	defer page.Close()
 
 	action := xiaohongshu.NewLikeAction(page)
@@ -482,7 +481,7 @@ func (s *XiaohongshuService) UnlikeFeed(ctx context.Context, feedID, xsecToken s
 	b := newBrowser()
 	defer b.Close()
 
-	page := b.NewPage()
+	page := b.NewNormalizedPage()
 	defer page.Close()
 
 	action := xiaohongshu.NewLikeAction(page)
@@ -497,7 +496,7 @@ func (s *XiaohongshuService) FavoriteFeed(ctx context.Context, feedID, xsecToken
 	b := newBrowser()
 	defer b.Close()
 
-	page := b.NewPage()
+	page := b.NewNormalizedPage()
 	defer page.Close()
 
 	action := xiaohongshu.NewFavoriteAction(page)
@@ -512,7 +511,7 @@ func (s *XiaohongshuService) UnfavoriteFeed(ctx context.Context, feedID, xsecTok
 	b := newBrowser()
 	defer b.Close()
 
-	page := b.NewPage()
+	page := b.NewNormalizedPage()
 	defer page.Close()
 
 	action := xiaohongshu.NewFavoriteAction(page)
@@ -527,7 +526,7 @@ func (s *XiaohongshuService) ReplyCommentToFeed(ctx context.Context, feedID, xse
 	b := newBrowser()
 	defer b.Close()
 
-	page := b.NewPage()
+	page := b.NewNormalizedPage()
 	defer page.Close()
 
 	action := xiaohongshu.NewCommentFeedAction(page)
@@ -545,7 +544,7 @@ func (s *XiaohongshuService) ReplyCommentToFeed(ctx context.Context, feedID, xse
 	}, nil
 }
 
-func newBrowser() *headless_browser.Browser {
+func newBrowser() *browser.Browser {
 	return browser.NewBrowser(configs.IsHeadless(), browser.WithBinPath(configs.GetBinPath()))
 }
 
@@ -569,7 +568,7 @@ func withBrowserPage(fn func(*rod.Page) error) error {
 	b := newBrowser()
 	defer b.Close()
 
-	page := b.NewPage()
+	page := b.NewNormalizedPage()
 	defer page.Close()
 
 	return fn(page)

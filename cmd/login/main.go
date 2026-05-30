@@ -23,7 +23,7 @@ func main() {
 	b := browser.NewBrowser(false, browser.WithBinPath(binPath))
 	defer b.Close()
 
-	page := b.NewPage()
+	page := b.NewNormalizedPage()
 	defer page.Close()
 
 	action := xiaohongshu.NewLogin(page)
