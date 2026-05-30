@@ -85,13 +85,13 @@ const normalizeJS = `(() => {
   try { Object.defineProperty(window, 'outerWidth', { get: () => window.innerWidth, configurable: true }); } catch (e) {}
   try { Object.defineProperty(window, 'outerHeight', { get: () => window.innerHeight + 88, configurable: true }); } catch (e) {}
 
-  // WebGL 去 Mac 化: Linux ANGLE + 软渲染(llvmpipe), 与 platform=Linux 自洽, 不碰 Windows/D3D11
+  // WebGL: Linux Intel Mesa 集显, 与 platform=Linux 自洽, 像正常 Linux 桌面用户
   const fix = (p) => {
     if (!p) return;
     const gp = p.getParameter;
     p.getParameter = function (x) {
-      if (x === 37445) return 'Google Inc. (Mesa)';
-      if (x === 37446) return 'ANGLE (Mesa, llvmpipe (LLVM 15.0.7, 256 bits), OpenGL 4.5 (Core Profile) Mesa 23.2.1)';
+      if (x === 37445) return 'Google Inc. (Intel)';
+      if (x === 37446) return 'ANGLE (Intel, Mesa Intel(R) UHD Graphics 630 (CFL GT2), OpenGL 4.6 (Core Profile) Mesa 23.2.1)';
       return gp.apply(this, arguments);
     };
   };
