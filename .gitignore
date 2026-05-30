@@ -42,3 +42,17 @@ test_*.sh
 
 # Cookies files (contain sensitive login information)
 cookies.json
+
+# ===== identity-normalize 分支补充 =====
+# 持久化浏览器 profile(含 Cookies/登录态/缓存, 绝不上传)
+profile/
+chrome-profile/
+*.profile/
+.xhs-profile*
+# 浏览器 profile 文件锁
+*.chrome-profile.lock
+.*-profile*.lock
+# audit 临时产物
+/tmp/xhs-audit
+# 部署备份二进制
+*.bak-*
