@@ -171,6 +171,11 @@ func (s *SearchAction) Search(ctx context.Context, keyword string, filters ...Fi
 	searchURL := makeSearchURL(keyword)
 	page.MustNavigate(searchURL)
 	page.MustWaitStable()
+	sleepFixedJitter(800*time.Millisecond, 250*time.Millisecond)
+
+	if err := CheckVerification(page); err != nil {
+		return nil, err
+	}
 
 	page.MustWait(`() => window.__INITIAL_STATE__ !== undefined`)
 

@@ -19,6 +19,7 @@ func NewFeedsListAction(page *rod.Page) *FeedsListAction {
 
 	pp.MustNavigate("https://www.xiaohongshu.com")
 	pp.MustWaitDOMStable()
+	sleepFixedJitter(800*time.Millisecond, 250*time.Millisecond)
 
 	return &FeedsListAction{page: pp}
 }
@@ -27,7 +28,11 @@ func NewFeedsListAction(page *rod.Page) *FeedsListAction {
 func (f *FeedsListAction) GetFeedsList(ctx context.Context) ([]Feed, error) {
 	page := f.page.Context(ctx)
 
-	time.Sleep(1 * time.Second)
+	sleepFixedJitter(1*time.Second, 300*time.Millisecond)
+
+	if err := CheckVerification(page); err != nil {
+		return nil, err
+	}
 
 	result := page.MustEval(`() => {
 		if (window.__INITIAL_STATE__ &&

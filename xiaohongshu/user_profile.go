@@ -25,6 +25,11 @@ func (u *UserProfileAction) UserProfile(ctx context.Context, userID, xsecToken s
 	searchURL := makeUserProfileURL(userID, xsecToken)
 	page.MustNavigate(searchURL)
 	page.MustWaitStable()
+	sleepFixedJitter(800*time.Millisecond, 250*time.Millisecond)
+
+	if err := CheckVerification(page); err != nil {
+		return nil, err
+	}
 
 	return u.extractUserProfileData(page)
 }
