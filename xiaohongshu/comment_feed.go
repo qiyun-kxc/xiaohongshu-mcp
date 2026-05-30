@@ -31,7 +31,11 @@ func (f *CommentFeedAction) PostComment(ctx context.Context, feedID, xsecToken, 
 	// 导航到详情页
 	page.MustNavigate(url)
 	page.MustWaitDOMStable()
-	time.Sleep(1 * time.Second)
+	sleepFixedJitter(1*time.Second, 300*time.Millisecond)
+
+	if err := CheckVerification(page); err != nil {
+		return err
+	}
 
 	// 检测页面是否可访问
 	if err := checkPageAccessible(page); err != nil {
@@ -60,7 +64,7 @@ func (f *CommentFeedAction) PostComment(ctx context.Context, feedID, xsecToken, 
 		return fmt.Errorf("无法输入评论内容: %w", err)
 	}
 
-	time.Sleep(1 * time.Second)
+	sleepFixedJitter(1*time.Second, 300*time.Millisecond)
 
 	submitButton, err := page.Element("div.bottom button.submit")
 	if err != nil {
@@ -73,7 +77,9 @@ func (f *CommentFeedAction) PostComment(ctx context.Context, feedID, xsecToken, 
 		return fmt.Errorf("无法点击提交按钮: %w", err)
 	}
 
-	time.Sleep(1 * time.Second)
+	if err := CheckVerificationAfterDelay(page, 1*time.Second); err != nil {
+		return err
+	}
 
 	logrus.Infof("Comment posted successfully to feed: %s", feedID)
 	return nil
@@ -90,7 +96,11 @@ func (f *CommentFeedAction) ReplyToComment(ctx context.Context, feedID, xsecToke
 	// 导航到详情页
 	page.MustNavigate(url)
 	page.MustWaitDOMStable()
-	time.Sleep(1 * time.Second)
+	sleepFixedJitter(1*time.Second, 300*time.Millisecond)
+
+	if err := CheckVerification(page); err != nil {
+		return err
+	}
 
 	// 检测页面是否可访问
 	if err := checkPageAccessible(page); err != nil {
@@ -98,7 +108,7 @@ func (f *CommentFeedAction) ReplyToComment(ctx context.Context, feedID, xsecToke
 	}
 
 	// 等待评论容器加载
-	time.Sleep(2 * time.Second)
+	sleepFixedJitter(2*time.Second, 500*time.Millisecond)
 
 	// 使用 Go 实现的查找逻辑
 	commentEl, err := findCommentElement(page, commentID, userID)
@@ -109,7 +119,7 @@ func (f *CommentFeedAction) ReplyToComment(ctx context.Context, feedID, xsecToke
 	// 滚动到评论位置
 	logrus.Info("滚动到评论位置...")
 	commentEl.MustScrollIntoView()
-	time.Sleep(1 * time.Second)
+	sleepFixedJitter(1*time.Second, 300*time.Millisecond)
 
 	logrus.Info("准备点击回复按钮")
 
@@ -123,7 +133,7 @@ func (f *CommentFeedAction) ReplyToComment(ctx context.Context, feedID, xsecToke
 		return fmt.Errorf("点击回复按钮失败: %w", err)
 	}
 
-	time.Sleep(1 * time.Second)
+	sleepFixedJitter(1*time.Second, 300*time.Millisecond)
 
 	// 查找回复输入框
 	inputEl, err := page.Element("div.input-box div.content-edit p.content-input")
@@ -136,7 +146,7 @@ func (f *CommentFeedAction) ReplyToComment(ctx context.Context, feedID, xsecToke
 		return fmt.Errorf("输入回复内容失败: %w", err)
 	}
 
-	time.Sleep(500 * time.Millisecond)
+	sleepFixedJitter(500*time.Millisecond, 150*time.Millisecond)
 
 	// 查找并点击提交按钮
 	submitBtn, err := page.Element("div.bottom button.submit")
@@ -148,7 +158,10 @@ func (f *CommentFeedAction) ReplyToComment(ctx context.Context, feedID, xsecToke
 		return fmt.Errorf("点击提交按钮失败: %w", err)
 	}
 
-	time.Sleep(2 * time.Second)
+	if err := CheckVerificationAfterDelay(page, 2*time.Second); err != nil {
+		return err
+	}
+
 	logrus.Infof("回复评论成功")
 	return nil
 }
@@ -162,7 +175,7 @@ func findCommentElement(page *rod.Page, commentID, userID string) (*rod.Element,
 
 	// 先滚动到评论区
 	scrollToCommentsArea(page)
-	time.Sleep(1 * time.Second)
+	sleepFixedJitter(1*time.Second, 300*time.Millisecond)
 
 	var lastCommentCount = 0
 	stagnantChecks := 0
@@ -215,7 +228,7 @@ func findCommentElement(page *rod.Page, commentID, userID string) (*rod.Element,
 			} else {
 				logrus.Warnf("未找到评论元素: %v", err)
 			}
-			time.Sleep(300 * time.Millisecond)
+			sleepFixedJitter(300*time.Millisecond, 100*time.Millisecond)
 		}
 
 		// === 5. 继续向下滚动 ===
@@ -224,7 +237,7 @@ func findCommentElement(page *rod.Page, commentID, userID string) (*rod.Element,
 		if err != nil {
 			logrus.Warnf("滚动失败: %v", err)
 		}
-		time.Sleep(500 * time.Millisecond)
+		sleepFixedJitter(500*time.Millisecond, 150*time.Millisecond)
 
 		// === 6. 滚动后立即查找（边滚动边查找）===
 		// 优先通过 commentID 查找（使用 Timeout 避免长时间等待）

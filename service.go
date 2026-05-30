@@ -544,8 +544,15 @@ func (s *XiaohongshuService) ReplyCommentToFeed(ctx context.Context, feedID, xse
 	}, nil
 }
 
-func newBrowser() *browser.Browser {
-	return browser.NewBrowser(configs.IsHeadless(), browser.WithBinPath(configs.GetBinPath()))
+func newBrowser() *guardedBrowser {
+	waitGlobalOperationCooldown("browser")
+
+	b := browser.NewBrowser(configs.IsHeadless(), browser.WithBinPath(configs.GetBinPath()))
+
+	return &guardedBrowser{
+		Browser: b,
+		opName:  "browser",
+	}
 }
 
 func saveCookies(page *rod.Page) error {

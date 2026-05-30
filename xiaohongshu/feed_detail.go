@@ -29,20 +29,7 @@ const (
 	finalSprintPushCount   = 15
 )
 
-// 延迟时间配置（毫秒）
-type delayConfig struct {
-	min, max int
-}
-
-var (
-	humanDelayRange   = delayConfig{300, 700}
-	reactionTimeRange = delayConfig{300, 800}
-	hoverTimeRange    = delayConfig{100, 300}
-	readTimeRange     = delayConfig{500, 1200}
-	shortReadRange    = delayConfig{600, 1200}
-	scrollWaitRange   = delayConfig{100, 200}
-	postScrollRange   = delayConfig{300, 500}
-)
+// delay 配置已移至 behavior.go
 
 // ========== 数据结构 ==========
 
@@ -386,27 +373,7 @@ func (cl *commentLoader) performFinalSprint() {
 		currentCount, cl.stats.totalClicked, cl.stats.totalSkipped, hasEnd)
 }
 
-// ========== 工具函数 ==========
-
-func sleepRandom(minMs, maxMs int) {
-	if maxMs <= minMs {
-		time.Sleep(time.Duration(minMs) * time.Millisecond)
-		return
-	}
-	delay := time.Duration(minMs+rand.Intn(maxMs-minMs)) * time.Millisecond
-	time.Sleep(delay)
-}
-
-func getScrollInterval(speed string) time.Duration {
-	switch speed {
-	case "slow":
-		return time.Duration(1200+rand.Intn(300)) * time.Millisecond
-	case "fast":
-		return time.Duration(300+rand.Intn(100)) * time.Millisecond
-	default: // normal
-		return time.Duration(600+rand.Intn(200)) * time.Millisecond
-	}
-}
+// sleepRandom / getScrollInterval 已移至 behavior.go
 
 // ========== 按钮点击 ==========
 
@@ -816,7 +783,11 @@ func checkEndContainer(page *rod.Page) bool {
 // ========== 页面检查 ==========
 
 func checkPageAccessible(page *rod.Page) error {
-	time.Sleep(500 * time.Millisecond)
+	if err := CheckVerification(page); err != nil {
+		return err
+	}
+
+	sleepFixedJitter(500*time.Millisecond, 150*time.Millisecond)
 
 	// 查找错误提示容器
 	wrapperEl, err := page.Timeout(2 * time.Second).Element(".access-wrapper, .error-wrapper, .not-found-wrapper, .blocked-wrapper")
