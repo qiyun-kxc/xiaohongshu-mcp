@@ -28,6 +28,12 @@ func (b *guardedBrowser) Close() {
 	}
 	b.closed = true
 
+	// 关闭前保存 cookie：每次操作结束后把浏览器里的新鲜 cookie 存回磁盘，
+	// 保活短期反爬 cookie（acw_tc、websectiga 等）。
+	if b.Browser != nil {
+		b.Browser.SaveFreshCookies()
+	}
+
 	// 给浏览器关闭加超时保护：Chrome 卡死时 30s 后强制释放锁，
 	// 防止单次请求卡住导致全局互斥锁（browserMu）永远不释放。
 	done := make(chan struct{})

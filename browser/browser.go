@@ -136,6 +136,33 @@ func (b *Browser) NewNormalizedPage() *rod.Page {
 	return page
 }
 
+// SaveFreshCookies 从浏览器获取当前所有 cookie 并保存到磁盘。
+// 每次操作后调用，保活短期反爬 cookie（acw_tc、websectiga 等），
+// 让下次请求带着新鲜的安全凭证出门。
+func (b *Browser) SaveFreshCookies() {
+	cks, err := b.browser.GetCookies()
+	if err != nil {
+		logrus.Warnf("failed to get cookies from browser: %v", err)
+		return
+	}
+	if len(cks) == 0 {
+		return
+	}
+
+	data, err := json.Marshal(cks)
+	if err != nil {
+		logrus.Warnf("failed to marshal cookies: %v", err)
+		return
+	}
+
+	cookiePath := cookies.GetCookiesFilePath()
+	if err := cookies.NewLoadCookie(cookiePath).SaveCookies(data); err != nil {
+		logrus.Warnf("failed to save fresh cookies: %v", err)
+	} else {
+		logrus.Debugf("saved %d fresh cookies", len(cks))
+	}
+}
+
 // Close 关闭浏览器、释放跨进程文件锁和进程级锁.
 // 持久化 profile 时绝不调 launcher.Cleanup(), 因为它会 os.RemoveAll 整个
 // user-data-dir, 删光 cookie/登录态.
