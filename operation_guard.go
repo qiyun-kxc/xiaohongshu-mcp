@@ -28,8 +28,26 @@ func (b *guardedBrowser) Close() {
 	}
 	b.closed = true
 
-	if b.Browser != nil {
-		b.Browser.Close()
+	// 给浏览器关闭加超时保护：Chrome 卡死时 30s 后强制释放锁，
+	// 防止单次请求卡住导致全局互斥锁（browserMu）永远不释放。
+	done := make(chan struct{})
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logrus.Warnf("browser close panicked: %v", r)
+			}
+			close(done)
+		}()
+		if b.Browser != nil {
+			b.Browser.Close()
+		}
+	}()
+
+	select {
+	case <-done:
+		// 正常关闭
+	case <-time.After(30 * time.Second):
+		logrus.Warn("browser close timed out after 30s, forcing lock release")
 	}
 
 	markOperationEnd(b.opName)
