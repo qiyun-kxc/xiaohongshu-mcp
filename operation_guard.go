@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
 	"os"
@@ -129,6 +130,59 @@ func markOperationEnd(opName string) {
 	logrus.Debugf("operation ended: %s", opName)
 }
 
+// ========== 每日调用限制 ==========
+
+var dailyLimit = struct {
+	sync.Mutex
+	date  string // "2006-01-02"
+	count int
+}{}
+
+// checkDailyLimit 检查今天是否还有调用额度。
+// 默认 50 次/天，通过 XHS_DAILY_LIMIT 环境变量可调。
+// 返回 nil 表示放行，返回 error 表示超限。
+func checkDailyLimit(opName string) error {
+	if !behaviorGuardEnabledMain() || envOffMain("XHS_DAILY_LIMIT_CHECK") {
+		return nil
+	}
+
+	limit := envIntMain("XHS_DAILY_LIMIT", 50)
+	today := time.Now().Format("2006-01-02")
+
+	dailyLimit.Lock()
+	defer dailyLimit.Unlock()
+
+	// 日期翻转，重置计数
+	if dailyLimit.date != today {
+		dailyLimit.date = today
+		dailyLimit.count = 0
+	}
+
+	dailyLimit.count++
+
+	if dailyLimit.count > limit {
+		logrus.Warnf("daily limit reached: %d/%d, rejecting %s", dailyLimit.count, limit, opName)
+		return fmt.Errorf("今日操作次数已达上限（%d次），明天再来吧", limit)
+	}
+
+	logrus.Debugf("daily usage: %d/%d (%s)", dailyLimit.count, limit, opName)
+	return nil
+}
+
+// GetDailyUsage 返回当日已用次数和上限，供 MCP status 接口调用。
+func GetDailyUsage() (used int, limit int) {
+	today := time.Now().Format("2006-01-02")
+	lim := envIntMain("XHS_DAILY_LIMIT", 50)
+
+	dailyLimit.Lock()
+	defer dailyLimit.Unlock()
+
+	if dailyLimit.date != today {
+		return 0, lim
+	}
+	return dailyLimit.count, lim
+}
+
 // ========== 随机分布 ==========
 
 func randomDurationNormalMain(min, max time.Duration) time.Duration {
@@ -179,4 +233,18 @@ func envDurationMsMain(name string, defaultMs int) time.Duration {
 	}
 
 	return time.Duration(n) * time.Millisecond
+}
+
+func envIntMain(name string, defaultVal int) int {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return defaultVal
+	}
+
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 1 {
+		logrus.Warnf("invalid %s=%q, fallback to %d", name, raw, defaultVal)
+		return defaultVal
+	}
+	return n
 }

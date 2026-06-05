@@ -839,19 +839,16 @@ func checkPageAccessible(page *rod.Page) error {
 func (f *FeedDetailAction) extractFeedDetail(page *rod.Page, feedID string) (*FeedDetailResponse, error) {
 	var result string
 
-	// 使用retry-go来处理可能的DOM查询失败
+	// 模拟真人浏览后再提取
+	simulateHumanBrowse(page)
+
+	// 间接读取应用状态，不直接引用全局变量名
 	err := retry.Do(
 		func() error {
-			evalResult := page.MustEval(`() => {
-				if (window.__INITIAL_STATE__ &&
-					window.__INITIAL_STATE__.note &&
-					window.__INITIAL_STATE__.note.noteDetailMap) {
-					const noteDetailMap = window.__INITIAL_STATE__.note.noteDetailMap;
-					return JSON.stringify(noteDetailMap);
-				}
-				return "";
-			}`).String()
-
+			evalResult, evalErr := readAppState(page, "note.noteDetailMap")
+			if evalErr != nil {
+				return evalErr
+			}
 			if evalResult != "" {
 				result = evalResult
 				return nil

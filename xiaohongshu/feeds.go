@@ -34,20 +34,12 @@ func (f *FeedsListAction) GetFeedsList(ctx context.Context) ([]Feed, error) {
 		return nil, err
 	}
 
-	result := page.MustEval(`() => {
-		if (window.__INITIAL_STATE__ &&
-		    window.__INITIAL_STATE__.feed &&
-		    window.__INITIAL_STATE__.feed.feeds) {
-			const feeds = window.__INITIAL_STATE__.feed.feeds;
-			const feedsData = feeds.value !== undefined ? feeds.value : feeds._value;
-			if (feedsData) {
-				return JSON.stringify(feedsData);
-			}
-		}
-		return "";
-	}`).String()
+	// 模拟真人浏览行为后再提取数据
+	simulateHumanBrowse(page)
 
-	if result == "" {
+	// 间接读取应用状态，不直接引用全局变量名
+	result, err := readAppState(page, "feed.feeds")
+	if err != nil || result == "" {
 		return nil, errors.ErrNoFeeds
 	}
 
