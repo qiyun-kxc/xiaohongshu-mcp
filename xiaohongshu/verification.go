@@ -131,7 +131,7 @@ func detectVerification(page *rod.Page) (verificationProbeResult, bool) {
 
 				if (
 					(visible(node) || node.tagName === 'IFRAME') &&
-					/captcha|verify|geetest|slider|risk/i.test(text)
+					/captcha|geetest/i.test(text)
 				) {
 					return JSON.stringify({
 						reason: 'verification-like element: ' + selector,

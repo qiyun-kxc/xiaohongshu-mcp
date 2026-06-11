@@ -170,14 +170,13 @@ func (s *SearchAction) Search(ctx context.Context, keyword string, filters ...Fi
 
 	searchURL := makeSearchURL(keyword)
 	page.MustNavigate(searchURL)
-	page.MustWaitStable()
+	page.MustWaitLoad()
+	page.MustWait(`() => window.__INITIAL_STATE__ !== undefined`)
 	sleepFixedJitter(800*time.Millisecond, 250*time.Millisecond)
 
 	if err := CheckVerification(page); err != nil {
 		return nil, err
 	}
-
-	page.MustWait(`() => window.__INITIAL_STATE__ !== undefined`)
 
 	// 如果有筛选条件，则应用筛选
 	if len(filters) > 0 {
@@ -214,7 +213,7 @@ func (s *SearchAction) Search(ctx context.Context, keyword string, filters ...Fi
 		}
 
 		// 等待页面更新
-		page.MustWaitStable()
+		page.MustWaitDOMStable()
 		// 重新等待 __INITIAL_STATE__ 更新
 		page.MustWait(`() => window.__INITIAL_STATE__ !== undefined`)
 	}

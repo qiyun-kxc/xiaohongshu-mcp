@@ -64,7 +64,11 @@ func (f *FeedDetailAction) GetFeedDetail(ctx context.Context, feedID, xsecToken,
 }
 
 func (f *FeedDetailAction) GetFeedDetailWithConfig(ctx context.Context, feedID, xsecToken, xsecSource string, loadAllComments bool, config CommentLoadConfig) (*FeedDetailResponse, error) {
-	page := f.page.Context(ctx).Timeout(10 * time.Minute)
+	timeout := 45 * time.Second
+	if loadAllComments {
+		timeout = 10 * time.Minute
+	}
+	page := f.page.Context(ctx).Timeout(timeout)
 
 	// source 轮转列表：优先用指定的 source，然后尝试其他常见 source
 	sources := buildSourceRotation(xsecSource)

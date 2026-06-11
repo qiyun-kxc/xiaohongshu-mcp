@@ -266,6 +266,29 @@ func (s *AppServer) handlePublishVideo(ctx context.Context, args map[string]inte
 	}
 }
 
+// formatFeedsCompact 将Feed列表格式化为紧凑纯文本，节省token
+func formatFeedsCompact(resp *FeedsListResponse) string {
+	var b strings.Builder
+	count := 0
+	for _, f := range resp.Feeds {
+		if f.ModelType == "hot_query" {
+			continue
+		}
+		count++
+		nc := f.NoteCard
+		typeTag := "图文"
+		if nc.Type == "video" {
+			typeTag = "视频"
+		}
+		b.WriteString(fmt.Sprintf("%d. [%s] %s\n   %s (uid:%s) | 👍%s 💬%s ⭐%s\n   id:%s xsec:%s\n\n",
+			count, typeTag, nc.DisplayTitle,
+			nc.User.Nickname, nc.User.UserID,
+			nc.InteractInfo.LikedCount, nc.InteractInfo.CommentCount, nc.InteractInfo.CollectedCount,
+			f.ID, f.XsecToken))
+	}
+	return fmt.Sprintf("共%d条：\n\n%s", count, b.String())
+}
+
 // handleListFeeds 处理获取Feeds列表
 func (s *AppServer) handleListFeeds(ctx context.Context) *MCPToolResult {
 	logrus.Info("MCP: 获取Feeds列表")
@@ -281,22 +304,10 @@ func (s *AppServer) handleListFeeds(ctx context.Context) *MCPToolResult {
 		}
 	}
 
-	// 格式化输出，转换为JSON字符串
-	jsonData, err := json.MarshalIndent(result, "", "  ")
-	if err != nil {
-		return &MCPToolResult{
-			Content: []MCPContent{{
-				Type: "text",
-				Text: fmt.Sprintf("获取Feeds列表成功，但序列化失败: %v", err),
-			}},
-			IsError: true,
-		}
-	}
-
 	return &MCPToolResult{
 		Content: []MCPContent{{
 			Type: "text",
-			Text: string(jsonData),
+			Text: formatFeedsCompact(result),
 		}},
 	}
 }
@@ -337,22 +348,10 @@ func (s *AppServer) handleSearchFeeds(ctx context.Context, args SearchFeedsArgs)
 		}
 	}
 
-	// 格式化输出，转换为JSON字符串
-	jsonData, err := json.MarshalIndent(result, "", "  ")
-	if err != nil {
-		return &MCPToolResult{
-			Content: []MCPContent{{
-				Type: "text",
-				Text: fmt.Sprintf("搜索Feeds成功，但序列化失败: %v", err),
-			}},
-			IsError: true,
-		}
-	}
-
 	return &MCPToolResult{
 		Content: []MCPContent{{
 			Type: "text",
-			Text: string(jsonData),
+			Text: formatFeedsCompact(result),
 		}},
 	}
 }

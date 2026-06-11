@@ -288,6 +288,7 @@ func registerTools(server *mcp.Server, appServer *AppServer) {
 			argsMap := map[string]interface{}{
 				"feed_id":           args.FeedID,
 				"xsec_token":        args.XsecToken,
+				"xsec_source":       args.XsecSource,
 				"load_all_comments": args.LoadAllComments,
 			}
 
