@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"math/rand"
@@ -15,8 +16,9 @@ import (
 	"github.com/xpzouying/xiaohongshu-mcp/xiaohongshu"
 )
 
-// guardedBrowser 包装 browser.Browser，在 Close 时自动标记操作结束。
-// 这样 15 个 public method 不用每个都 defer markOperationEnd。
+// guardedBrowser 包装 browser.Browser, Close 时自动标记操作结束.
+// 关闭超时 + 锁释放 + panic 恢复在 browser 包内部已经处理,
+// 这层不再重复 timeout 兜底, 只负责业务侧的 cookie 保存 + 节流标记.
 type guardedBrowser struct {
 	*browser.Browser
 	opName string
@@ -29,32 +31,11 @@ func (b *guardedBrowser) Close() {
 	}
 	b.closed = true
 
-	// 关闭前保存 cookie：每次操作结束后把浏览器里的新鲜 cookie 存回磁盘，
-	// 保活短期反爬 cookie（acw_tc、websectiga 等）。
+	// 关闭前保存 cookie: 把浏览器里的新鲜 cookie 存回磁盘,
+	// 保活短期反爬 cookie (acw_tc, websectiga 等).
 	if b.Browser != nil {
 		b.Browser.SaveFreshCookies()
-	}
-
-	// 给浏览器关闭加超时保护：Chrome 卡死时 30s 后强制释放锁，
-	// 防止单次请求卡住导致全局互斥锁（browserMu）永远不释放。
-	done := make(chan struct{})
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				logrus.Warnf("browser close panicked: %v", r)
-			}
-			close(done)
-		}()
-		if b.Browser != nil {
-			b.Browser.Close()
-		}
-	}()
-
-	select {
-	case <-done:
-		// 正常关闭
-	case <-time.After(30 * time.Second):
-		logrus.Warn("browser close timed out after 30s, forcing lock release")
+		b.Browser.Close()
 	}
 
 	markOperationEnd(b.opName)
@@ -80,15 +61,16 @@ func operationThrottleEnabled() bool {
 	return behaviorGuardEnabledMain() && !envOffMain("XHS_OPERATION_THROTTLE")
 }
 
-// waitGlobalOperationCooldown 在每次创建 browser 前调用。
-// 语义：距上一次 browser Close 至少间隔 minInterval + jitter。
-// 若验证码退避生效，取退避惩罚和正常冷却中较长者。
-func waitGlobalOperationCooldown(opName string) {
+// waitGlobalOperationCooldown 在每次创建 browser 前调用.
+// 语义: 距上一次 browser Close 至少间隔 minInterval + jitter;
+// 若验证码退避生效, 取退避惩罚和正常冷却中较长者.
+// 等待期间监听 ctx, 上游取消时立即返 ctx.Err() 不再死睡.
+func waitGlobalOperationCooldown(ctx context.Context, opName string) error {
 	if !operationThrottleEnabled() {
-		return
+		return nil
 	}
 
-	// 初期保守。浏览器冷启动本身已有 2-5s 间隔。
+	// 初期保守, 浏览器冷启动本身已有 2-5s 间隔.
 	minInterval := envDurationMsMain("XHS_OPERATION_MIN_INTERVAL_MS", 1200)
 	jitter := envDurationMsMain("XHS_OPERATION_JITTER_MS", 1000)
 
@@ -111,11 +93,16 @@ func waitGlobalOperationCooldown(opName string) {
 	}
 
 	if wait <= 0 {
-		return
+		return nil
 	}
 
 	logrus.Infof("operation cooldown before %s: %s", opName, wait.Round(time.Millisecond))
-	time.Sleep(wait)
+	select {
+	case <-time.After(wait):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func markOperationEnd(opName string) {

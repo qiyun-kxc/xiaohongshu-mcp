@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -773,8 +774,12 @@ func (s *AppServer) handleResolveShortlink(ctx context.Context, rawURL string) *
 }
 
 // handleExtractTextFromFeed 获取帖子详情并OCR所有图片
-func (s *AppServer) handleExtractTextFromFeed(ctx context.Context, args map[string]any) *MCPToolResult {
+func (s *AppServer) handleExtractTextFromFeed(parent context.Context, args map[string]any) *MCPToolResult {
 	logrus.Info("MCP: 提取帖子图文")
+
+	// 内部 deadline：180s，比 Drawer 的 210s 小，确保部分结果能在 Drawer 连接存活时返回
+	ctx, cancel := context.WithTimeoutCause(parent, 180*time.Second, ErrExtractionDeadline)
+	defer cancel()
 
 	feedID, _ := args["feed_id"].(string)
 	xsecToken, _ := args["xsec_token"].(string)
@@ -857,11 +862,11 @@ func (s *AppServer) handleExtractTextFromFeed(ctx context.Context, args map[stri
 	if len(imageURLs) == 0 {
 		// 没有图片，直接返回文字内容
 		result := map[string]any{
-			"feed_id": feedID,
-			"title":   note.Note.Title,
-			"author":  note.Note.User.Nickname,
-			"desc":    note.Note.Desc,
-			"images":  []any{},
+			"feed_id":  feedID,
+			"title":    note.Note.Title,
+			"author":   note.Note.User.Nickname,
+			"desc":     note.Note.Desc,
+			"images":   []any{},
 			"text_all": note.Note.Desc,
 		}
 		jsonData, _ := json.MarshalIndent(result, "", "  ")
@@ -871,7 +876,7 @@ func (s *AppServer) handleExtractTextFromFeed(ctx context.Context, args map[stri
 	}
 
 	// 启动OCR
-	bridge, err := GetOCRBridge()
+	bridge, err := GetOCRBridge(ctx)
 	if err != nil {
 		return &MCPToolResult{
 			Content: []MCPContent{{Type: "text", Text: "OCR引擎启动失败: " + err.Error()}},
@@ -880,7 +885,7 @@ func (s *AppServer) handleExtractTextFromFeed(ctx context.Context, args map[stri
 	}
 
 	logrus.Infof("开始OCR %d 张图片", len(imageURLs))
-	ocrResults := bridge.OCRMultiple(imageURLs)
+	ocrResults, ocrErr := bridge.OCRMultiple(ctx, imageURLs)
 
 	// 组装结果
 	textAll := ""
@@ -907,23 +912,67 @@ func (s *AppServer) handleExtractTextFromFeed(ctx context.Context, args map[stri
 		}
 	}
 
-	status := "success"
+	// 调用方主动取消：不拼装部分结果，直接返回错误。
+	if parent.Err() != nil {
+		return &MCPToolResult{
+			Content: []MCPContent{{Type: "text", Text: "调用已取消: " + parent.Err().Error()}},
+			IsError: true,
+		}
+	}
+
+	ocrStatus := "success"
 	if successCount == 0 {
-		status = "failed"
+		ocrStatus = "failed"
 	} else if successCount < len(ocrResults) {
-		status = "partial_success"
+		ocrStatus = "partial_success"
+	}
+
+	// 任务终止状态摘要（PR1 / Step 0 新增）
+	items := make([]ImageOCRItem, len(ocrResults))
+	for i, r := range ocrResults {
+		items[i] = ImageOCRItem{
+			Index:     i,
+			Status:    r.Status,
+			Text:      r.Text,
+			LineCount: r.LineCount,
+			ElapsedMs: r.ElapsedMs,
+			Error:     r.Error,
+		}
+	}
+	var extraction ExtractionResult
+	cause := context.Cause(ctx)
+	switch {
+	// 图片数上限触发：OCRMultiple 直接返 ErrImageLimit。
+	case errors.Is(ocrErr, ErrImageLimit):
+		extraction = partialResult(len(imageURLs), items, TruncatedByImageLimit)
+	// 内部 deadline 到期：ctx.Cause 注入 ErrExtractionDeadline。
+	case errors.Is(cause, ErrExtractionDeadline):
+		extraction = partialResult(len(imageURLs), items, TruncatedByDeadline)
+	// 其他 ctx 错误（非 parent 取消，因前面已 return）：作部分结果带 deadline 语义。
+	case ocrErr != nil:
+		extraction = partialResult(len(imageURLs), items, TruncatedByDeadline)
+	default:
+		extraction = completeResult(len(imageURLs), items)
 	}
 
 	result := map[string]any{
-		"feed_id":    feedID,
-		"title":      note.Note.Title,
-		"author":     note.Note.User.Nickname,
-		"desc":       note.Note.Desc,
-		"ocr_status": status,
-		"ocr_engine": "rapidocr-onnxruntime",
-		"image_count": len(imageURLs),
-		"text_all":   textAll,
-		"images":     images,
+		"feed_id":               feedID,
+		"title":                 note.Note.Title,
+		"author":                note.Note.User.Nickname,
+		"desc":                  note.Note.Desc,
+		"ocr_status":            ocrStatus,
+		"ocr_engine":            "rapidocr-onnxruntime",
+		"image_count":           len(imageURLs),
+		"text_all":              textAll,
+		"images":                images,
+		"status":                extraction.Status,
+		"total_image_count":     extraction.TotalImageCount,
+		"processed_image_count": extraction.ProcessedImageCount,
+		"remaining_image_count": extraction.RemainingImageCount,
+		"truncated":             extraction.Truncated,
+	}
+	if extraction.Truncated {
+		result["truncated_reason"] = extraction.TruncatedReason
 	}
 
 	jsonData, err := json.MarshalIndent(result, "", "  ")

@@ -19,8 +19,11 @@ func main() {
 	flag.StringVar(&binPath, "bin", "", "浏览器二进制文件路径")
 	flag.Parse()
 
-	// 登录的时候，需要界面，所以不能无头模式
-	b := browser.NewBrowser(false, browser.WithBinPath(binPath))
+	// 登录的时候, 需要界面, 所以不能无头模式
+	b, err := browser.NewBrowser(context.Background(), false, browser.WithBinPath(binPath))
+	if err != nil {
+		logrus.Fatalf("failed to create browser: %v", err)
+	}
 	defer b.Close()
 
 	page := b.NewNormalizedPage()

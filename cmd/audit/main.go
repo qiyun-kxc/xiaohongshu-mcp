@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -28,7 +30,10 @@ func main() {
 	time.Sleep(300 * time.Millisecond)
 	addr := "http://127.0.0.1:" + strconv.Itoa(port) + "/"
 
-	b := browser.NewBrowser(true)
+	b, err := browser.NewBrowser(context.Background(), true)
+	if err != nil {
+		log.Fatalf("failed to create browser: %v", err)
+	}
 	defer b.Close()
 
 	var page *rod.Page

@@ -14,7 +14,8 @@ func TestPublish(t *testing.T) {
 
 	t.Skip("SKIP: 测试发布")
 
-	b := browser.NewBrowser(false)
+	b, err := browser.NewBrowser(context.Background(), false)
+	require.NoError(t, err)
 	defer b.Close()
 
 	page := b.NewPage()

@@ -3,12 +3,17 @@
 Go服务启动此进程，通过stdin发送请求，stdout接收结果。
 每行一个JSON请求，每行一个JSON响应。
 """
+import contextlib
 import sys
 import json
 import time
 import urllib.request
 import tempfile
 import os
+
+# 下载安全限制
+MAX_IMAGE_BYTES = 15 * 1024 * 1024  # 单图上限 15MB
+ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp"}
 
 # 初始化OCR引擎（只加载一次）
 from rapidocr_onnxruntime import RapidOCR
@@ -55,12 +60,38 @@ def process_image(image_path):
             "elapsed_ms": 0
         }
 
-def download_image(url, timeout=10):
-    """下载图片到临时文件"""
+def _download_image_safe(url, timeout=15):
+    """安全下载图片：显式超时、大小上限、Content-Type 白名单。失败抛异常。"""
+    request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    path = None
     try:
-        tmp = tempfile.NamedTemporaryFile(suffix=".webp", delete=False)
-        urllib.request.urlretrieve(url, tmp.name)
-        return tmp.name, None
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            content_type = response.headers.get_content_type()
+            if content_type not in ALLOWED_TYPES:
+                raise ValueError(f"unsupported content type: {content_type}")
+            with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                path = tmp.name
+                total = 0
+                while True:
+                    chunk = response.read(64 * 1024)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > MAX_IMAGE_BYTES:
+                        raise ValueError("image exceeds size limit")
+                    tmp.write(chunk)
+        return path
+    except Exception:
+        if path:
+            with contextlib.suppress(OSError):
+                os.unlink(path)
+        raise
+
+
+def download_image(url, timeout=15):
+    """下载图片到临时文件。返回 (path, err)；保留旧契约以便 handle_request 不变。"""
+    try:
+        return _download_image_safe(url, timeout=timeout), None
     except Exception as e:
         return None, str(e)
 
@@ -104,15 +135,21 @@ def main():
         line = line.strip()
         if not line:
             continue
-        
+
+        req_id = None
         try:
             req = json.loads(line)
+            req_id = req.get("id")
             resp = handle_request(req)
         except json.JSONDecodeError as e:
             resp = {"status": "error", "error": f"invalid JSON: {e}"}
         except Exception as e:
             resp = {"status": "error", "error": f"unexpected: {e}"}
-        
+
+        # 协议：请求带 id 时响应必须回 id，让 Go 端校验匹配防错位
+        if req_id is not None:
+            resp["id"] = req_id
+
         sys.stdout.write(json.dumps(resp, ensure_ascii=False) + "\n")
         sys.stdout.flush()
 
