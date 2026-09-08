@@ -36,6 +36,8 @@ go.work.sum
 
 # Build artifacts
 xiaohongshu-mcp
+/xiaohongshu-mcp-*
+__pycache__/
 
 # Test scripts
 test_*.sh
